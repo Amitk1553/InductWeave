@@ -21,13 +21,13 @@ export const aiTaskSchema = z.object({
 export const aiChecklistRootSchema = z.object({ tasks: z.array(z.unknown()) });
 
 export const chatAnswerSchema = z.object({
-  answer: z.string().trim().min(1).max(3000),
+  answer: z.string().trim().min(1, 'Answer is empty').max(3000),
   citations: z
     .array(
       z.object({
         doc_name: z.string().trim().min(1),
         section: z.string().trim().min(1),
-        quote: z.string().trim().max(600).default(''),
+        quote: z.string().trim().max(600).optional().default(''),
       }),
     )
     .default([]),
@@ -73,7 +73,7 @@ export const chatResponseJsonSchema = {
           section: { type: 'string' },
           quote: { type: 'string' },
         },
-        required: ['doc_name', 'section', 'quote'],
+        required: ['doc_name', 'section'],
       },
     },
     confidence: { type: 'number', description: '0.0 to 1.0' },

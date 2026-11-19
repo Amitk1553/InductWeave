@@ -10,6 +10,7 @@ const make = ({ windowMs, limit, message }) =>
       res.status(429).json({ error: { code: 'RATE_LIMITED', message } }),
   });
 
+const ONE_MINUTE = 60 * 1000;
 const FIFTEEN_MIN = 15 * 60 * 1000;
 
 export const generalLimiter = make({
@@ -18,10 +19,11 @@ export const generalLimiter = make({
   message: 'Too many requests, please try again later.',
 });
 
+// 20 requests per minute per user/IP
 export const chatLimiter = make({
-  windowMs: FIFTEEN_MIN,
-  limit: 40,
-  message: 'Too many chat messages, please slow down.',
+  windowMs: ONE_MINUTE,
+  limit: 20,
+  message: 'Too many chat messages. Please wait a moment before asking another question.',
 });
 
 export const generationLimiter = make({

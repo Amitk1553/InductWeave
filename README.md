@@ -46,6 +46,35 @@ sequenceDiagram
 | 11 | Observability metrics and charts | `harness/observability.js`, `ObservabilityPage` |
 | 12 | Role-based dashboards (HR, manager, employee) | `frontend/src/pages` |
 | 13 | Manual eval script | `npm run eval` |
+| 14 | Company policy chatbot eval script | `npm run eval:chat` |
+
+## Company Policy Chatbot (RAG)
+
+### What the Chatbot Does
+The chatbot answers employee questions regarding Nimbus Technologies company policies (e.g. general company policies overview, day-one document requirements, health insurance enrollment, IT equipment lead times, dress code, and working hours). It answers **only** from official company policy markdown files stored in Neon PostgreSQL with pgvector, always cites the specific document and section used, and for out-of-scope or undocumented questions, informs the employee: `"I don't have information about this yet. This policy information will be added soon."`.
+
+### How RAG Works Here
+Retrieval-Augmented Generation (RAG) in this system couples semantic vector search with strict guardrails. When an employee asks a question, the input is first sanitized and inspected for prompt-injection patterns (`sanitizer.js`). If clean, the question is embedded using Google Gemini's `gemini-embedding-001` model (`RETRIEVAL_QUERY` task type) and matched against policy chunks stored in Neon pgvector using cosine distance (`<=>`), optionally filtered by location scope (`india`, `us`, or `global`). A similarity gate checks whether the best matching chunk meets `RAG_MIN_SCORE` (0.35); if no chunk meets the threshold, the LLM call is bypassed completely and the assistant immediately returns the standard refusal.
+
+For grounded queries, the top matching chunks and the last `CHAT_HISTORY_TURNS` messages are injected into a versioned prompt (`promptTemplates.js`) instructing Gemini to respond strictly in structured JSON. The response is validated with Zod (`guardrails.js`), and citation verification ensures that every cited `doc_name` and `section` corresponds to a chunk that was actually retrieved in that turn. Fabricated citations are dropped, and ungrounded answers or low-confidence responses automatically trigger `escalated = true`, surfacing a "Contact HR about this question" button in the frontend `ChatWidget`.
+
+### Adding or Editing Policy Files
+Policy documents reside in `backend/src/data/policies/` as Markdown files formatted with a single `#` H1 title and numbered `##` headings (e.g., `## 3.2 Documents Required on Day One`).
+
+To add or update policies:
+1. Create or edit a `.md` file in `backend/src/data/policies/` (e.g. `benefits_policy.md`).
+2. Ensure each topic has a unique, numbered `##` heading and self-contained content.
+3. Run the idempotent ingestion script:
+   ```bash
+   npm --prefix backend run ingest
+   ```
+   This splits documents at section boundaries, embeds each chunk with `gemini-embedding-001`, and updates `policy_chunks`.
+
+### Running the Chatbot Evaluation Suite
+To execute the automated evaluation suite testing all 9 scenarios (including document citations, refusal correctness, prompt-injection defense, and conversational follow-ups):
+```bash
+npm --prefix backend run eval:chat
+```
 
 ## Architecture
 
@@ -129,14 +158,16 @@ npm run dev                   # http://localhost:5173
 | `DATABASE_URL` | required | Neon connection string |
 | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | required | Clerk |
 | `GEMINI_API_KEY` | required | Gemini |
-| `GEMINI_MODEL` | gemini-2.5-flash | Generation model |
+| `GEMINI_MODEL` | gemini-3.5-flash-lite | Generation model (e.g. gemini-3.5-flash-lite or gemini-3.8-flash) |
 | `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | Embedding model |
 | `EMBEDDING_DIMENSIONS` | 768 | Must match the model output and the `vector(N)` column |
-| `LLM_TEMPERATURE` | 0.1 | |
-| `LLM_TIMEOUT_MS` | 30000 | |
-| `RAG_TOP_K` | 5 | Chunks retrieved |
+| `LLM_TEMPERATURE` | 0.1 | Temperature for generation |
+| `LLM_TIMEOUT_MS` | 30000 | Request timeout in milliseconds |
+| `RAG_TOP_K` | 5 | Number of relevant chunks retrieved per question |
+| `RAG_MIN_SCORE` | 0.35 | Minimum cosine similarity score; below this, skips LLM and refuses |
+| `CHAT_HISTORY_TURNS` | 5 | Preceding conversation turns included for context |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | 500 / 50 | Tokens (approximated as 4 characters) |
-| `PROMPT_VERSION` | v1.2 | Recorded in audit and metrics |
+| `PROMPT_VERSION` | chat-v1.0 | Prompt version recorded in audit and metrics |
 | `CORS_ORIGIN` | http://localhost:5173 | Comma-separated allowed origins |
 | `ESCALATION_CRON` | `0 * * * *` | Escalation scan schedule |
 | `FORCE_LLM_FAILURE` | false | `true` makes every Gemini call fail, to demo the fallback |

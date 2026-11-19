@@ -1,31 +1,53 @@
-# United States Onboarding Policy
+# US Onboarding and Employment Policy
 
-This policy applies to employees based in the United States, including New York. It supplements the Global Onboarding Policy.
+This policy governs the onboarding, compliance requirements, and employment provisions for employees of Nimbus Technologies Inc. based in our New York office and remote locations across the United States.
 
-## Tax Withholding (Form W-4)
+## 2.1 US Employment Overview
 
-Every US employee must complete Federal Form W-4 (Employee's Withholding Certificate) on or before the first day of work. The form tells payroll how much federal income tax to withhold from each paycheck. State and local withholding forms are provided during onboarding for New York employees (Form IT-2104 for New York State and, where applicable, the New York City form). If no W-4 is submitted, payroll must withhold at the single filer rate with no adjustments. You can update your W-4 at any time through the payroll portal.
+Nimbus Technologies Inc. is an equal opportunity employer operating under federal and state employment laws. All US employment is "at-will" unless explicitly modified by a written executive contract. This document outlines mandatory tax, immigration, payroll, and benefits onboarding requirements for all US-based personnel.
 
-## Employment Eligibility (Form I-9)
+## 2.2 Form W-4 Federal Tax Withholding
 
-Federal law requires all employees to complete Form I-9 to verify identity and authorization to work in the United States. You complete Section 1 on or before your first day of employment. Within three business days of your start date you must present original, unexpired documents to HR: either one document from List A (for example a US passport), or one document each from List B (identity) and List C (work authorization). Copies and photographs are not accepted unless the E-Verify remote document examination process is used. Employees who cannot present documents in time may be placed on unpaid leave until verification is completed.
+Every employee must complete IRS Form W-4 (Employee's Withholding Certificate) so Nimbus Technologies can calculate correct federal income tax withholding:
+- New hires must complete and submit Form W-4 electronically via the employee portal on or before their first day of work.
+- If an employee does not submit a completed Form W-4, tax withholding will default to single filing status with zero adjustments in accordance with IRS rules.
+- State withholding certificates (such as NY IT-2104) must also be completed if working in applicable states or jurisdictions.
+- Employees can update their W-4 tax withholding elections at any time during employment through the HR portal.
 
-## SSN Verification
+## 2.3 Form I-9 Employment Eligibility Verification
 
-HR verifies your Social Security Number through the employer verification service within three business days of your start date for payroll and tax reporting. If you have applied for an SSN but have not yet received it, tell HR on day one; you will not be penalized, but you must provide the number within 60 days of starting.
+In compliance with federal immigration law (Immigration Reform and Control Act), Nimbus Technologies must verify the employment eligibility and identity of every new employee:
+- Section 1 of Form I-9 must be completed by the employee no later than the first day of employment (Day 1).
+- Section 2 must be completed and physically verified by an authorized Nimbus representative within three (3) business days of the employee's start date.
+- Employees must present original, unexpired documents from the Form I-9 List of Acceptable Documents (either one document from List A, such as a US Passport, or a combination of one document from List B, like a driver's license, and one document from List C, like an unrestricted Social Security card).
+- Photocopies or laminated Social Security cards cannot be accepted. Failure to present valid I-9 documentation within three business days results in immediate suspension of employment.
 
-## Direct Deposit
+## 2.4 Social Security Number (SSN) Verification
 
-Pay is issued every second Friday by direct deposit. Submit your bank name, routing number and account number through the payroll portal within five days of joining. If you do not set up direct deposit, a physical paycheck is mailed to your home address, which may delay receipt.
+All US employees must provide their Social Security Number for payroll, tax reporting, and benefits administration:
+- A clear copy of the original Social Security Card must be uploaded securely to the onboarding portal during pre-boarding.
+- The legal name on file with Nimbus must match the exact name appearing on the Social Security card to avoid discrepancies in annual IRS W-2 reporting.
+- Employees holding temporary work visas (such as H-1B, L-1, or TN) who have applied for an SSN but have not yet received it must provide their receipt notice and update HR immediately upon receiving their card.
 
-## Background Check (US)
+## 2.5 Direct Deposit and Payroll Setup
 
-All offers are contingent on a satisfactory pre-employment background check performed by our screening vendor, covering identity, criminal records, and employment history as permitted by law. You will receive an email with a disclosure and authorization form before your start date; please complete it within two business days. The check is generally completed within three to five business days. Source code and production access is granted only after the check is cleared, and under the Fair Credit Reporting Act you receive a copy of the report on request.
+Nimbus Technologies processes payroll on a bi-weekly cadence on alternating Fridays:
+- Employees are encouraged to enroll in direct deposit for fast and secure payroll disbursement.
+- Direct deposit enrollment requires submitting the routing transit number and account number for checking or savings accounts.
+- Direct deposit authorization must be completed within five (5) business days of the start date.
+- Until direct deposit authorization takes effect, payroll checks are mailed to the employee's primary residential address on file.
 
-## Benefits Enrollment (US)
+## 2.6 Background Check Policy (US)
 
-Health, dental and vision insurance, a 401(k) plan with company match, and life insurance are available to full-time employees. You have 30 days from your start date to enroll in medical, dental and vision; coverage begins on the first day of the month following your start date. The 401(k) match is 100 percent of the first 4 percent of salary contributed, vesting immediately. You can enroll in the 401(k) at any time after your first day.
+Employment offers in the US are contingent upon the successful completion of a comprehensive pre-employment background screening:
+- The check includes criminal history searches at federal, state, and county levels, verification of prior employment, educational degree verification, and reference checks.
+- Candidates receive a disclosure and authorization form under the Fair Credit Reporting Act (FCRA) through our third-party background screening partner.
+- Final clearance must be received prior to starting work; adverse findings will undergo an individualized assessment by People Operations before any employment action is taken.
 
-## Paid Time Off (US)
+## 2.7 401(k) Retirement Plan Enrollment
 
-Beyond the global leave policy, US employees receive 11 paid company holidays, 15 days of PTO in the first two years, and 3 paid floating holidays. New York employees also accrue paid sick leave under the New York State Paid Sick Leave law, one hour for every thirty hours worked, up to 56 hours per year. Paid family leave is provided through the New York State Paid Family Leave program.
+Nimbus Technologies offers a comprehensive 401(k) retirement savings plan through our designated financial investment partner:
+- Eligibility: Full-time US employees are eligible to participate starting on the first day of the calendar month following thirty (30) days of employment.
+- Company Match: Nimbus matches 100% of employee contributions up to the first 4% of eligible compensation contributed, plus 50% on the next 2% contributed (maximum 5% match).
+- Vesting: Employee elective deferrals vest immediately at 100%; employer matching contributions vest over a two-year graded schedule (50% after year one, 100% after year two).
+- Enrollment: Eligible employees receive an invitation email from our 401(k) plan provider with portal access to set up deferral percentages and investment allocations.

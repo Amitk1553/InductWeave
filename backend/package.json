@@ -14,7 +14,8 @@
     "db:migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
     "ingest": "node src/scripts/ingestPolicies.js",
-    "eval": "node src/scripts/evalAi.js"
+    "eval": "node src/scripts/evalAi.js",
+    "eval:chat": "node src/scripts/evalChat.js"
   },
   "dependencies": {
     "@clerk/express": "^1.7.48",

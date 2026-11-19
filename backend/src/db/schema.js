@@ -110,8 +110,9 @@ export const policyChunks = pgTable(
   {
     id: serial('id').primaryKey(),
     docName: text('doc_name').notNull(),
+    docTitle: text('doc_title').notNull().default(''),
     section: text('section').notNull(),
-    chunkIndex: integer('chunk_index').notNull(),
+    chunkIndex: integer('chunk_index').notNull().default(0),
     content: text('content').notNull(),
     locationScope: text('location_scope').notNull().default('global'),
     roleScope: text('role_scope').notNull().default('all'),
@@ -128,8 +129,8 @@ export const chatMessages = pgTable(
   'chat_messages',
   {
     id: serial('id').primaryKey(),
+    userKey: text('user_key').notNull().default('anonymous'),
     employeeId: integer('employee_id')
-      .notNull()
       .references(() => employees.id, { onDelete: 'cascade' }),
     // user | assistant
     role: text('role').notNull(),
@@ -139,7 +140,10 @@ export const chatMessages = pgTable(
     escalated: boolean('escalated').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [index('chat_employee_idx').on(t.employeeId, t.createdAt)],
+  (t) => [
+    index('chat_messages_user_idx').on(t.userKey, t.createdAt),
+    index('chat_employee_idx').on(t.employeeId, t.createdAt),
+  ],
 );
 
 export const escalations = pgTable(

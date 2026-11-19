@@ -66,4 +66,10 @@ export async function embedTexts(texts, { kind = 'document', titles = [] } = {})
 
 export const embedQuery = async (text) => (await embedTexts([text], { kind: 'query' }))[0];
 
+export async function embed(text, taskType = 'RETRIEVAL_DOCUMENT') {
+  const kind = taskType === 'RETRIEVAL_QUERY' ? 'query' : 'document';
+  const [vector] = await embedTexts([text], { kind });
+  return vector;
+}
+
 export const toVectorLiteral = (vec) => `[${vec.join(',')}]`;

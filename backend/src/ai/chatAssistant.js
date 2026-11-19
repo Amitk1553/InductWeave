@@ -3,140 +3,282 @@ import { logger } from '../config/logger.js';
 import { insertChatMessage, listChatHistory } from '../db/queries/chat.js';
 import { auditLogger, AUDIT_EVENTS } from '../harness/auditLogger.js';
 import { finalizeLlmCall } from '../harness/observability.js';
-import { describeProfile } from '../services/rulesEngine.service.js';
 import { generateJson, LlmError } from './geminiClient.js';
 import { validateChatOutput } from './guardrails.js';
 import {
   buildChatPrompt,
+  buildCorrectionPrompt,
   CHAT_SYSTEM,
   INJECTION_REFUSAL_TEXT,
   REFUSAL_TEXT,
   UNAVAILABLE_TEXT,
 } from './promptTemplates.js';
-import { formatChunks, retrieve } from './ragPipeline.js';
+import { retrieve } from './ragPipeline.js';
 import { sanitizeText } from './sanitizer.js';
 import { chatResponseJsonSchema } from '../schemas/aiOutput.schema.js';
 
-const LOW_CONFIDENCE = 0.3;
-const normalize = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const isRefusal = (answer) => normalize(answer).startsWith(normalize(REFUSAL_TEXT).slice(0, 40));
+const LOW_CONFIDENCE_THRESHOLD = 0.3;
 
-async function reply(employee, userRow, { answer, citations = [], confidence = null, escalated = false, auditMeta = {} }) {
-  const assistant = await insertChatMessage({
-    employeeId: employee.id,
-    role: 'assistant',
-    message: answer,
-    citations,
-    confidence,
-    escalated,
-  });
-  await auditLogger.log({
-    eventType: AUDIT_EVENTS.CHAT_QUERY,
-    employeeId: employee.id,
-    actor: 'ai',
-    details: `Chat question answered (escalated: ${escalated})`,
-    metadata: { message_id: assistant.id, confidence, escalated, citations: citations.length, ...auditMeta },
-  });
-  if (escalated && !auditMeta.llm_error) {
-    await auditLogger.log({
-      eventType: AUDIT_EVENTS.CHAT_UNANSWERED,
-      employeeId: employee.id,
-      actor: 'ai',
-      details: `Unanswered question: ${userRow.message}`,
-      metadata: { message_id: assistant.id, user_message_id: userRow.id, confidence },
-    });
-  }
-  return assistant;
-}
+const normalizeStr = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const isRefusal = (answer) => {
+  const normA = normalizeStr(answer);
+  const normR = normalizeStr(REFUSAL_TEXT);
+  return (
+    normA.includes(normR) ||
+    normA.includes('don t have information') ||
+    normA.includes('added soon') ||
+    normA.includes('contact hr directly')
+  );
+};
 
 /**
- * Policy-grounded Q&A. Pipeline: sanitize -> retrieve -> prompt -> validate -> verify citations -> escalate.
- * Never throws for model problems; the employee always gets a usable reply.
+ * Policy-grounded Q&A Assistant.
+ * Pipeline: sanitize -> retrieve -> similarity gate -> prompt -> call LLM -> validate -> verify citations -> escalate.
+ * Returns { answer, citations: [{ doc_title, doc_name, section }], confidence, escalated }.
  */
-export async function answerQuestion({ employee, message, simulate = null }) {
-  const { text, flagged, reasons, truncated } = sanitizeText(message, { maxLength: 1000 });
+export async function answerQuestion({
+  question,
+  message,
+  history,
+  locationScope,
+  employee,
+  userKey,
+  simulate = null,
+}) {
+  const rawText = question ?? message ?? '';
+  const startTime = Date.now();
 
-  // History must be read before saving the new question so it is not echoed back as "earlier".
-  const history = (await listChatHistory(employee.id, 5)).map((m) => ({
-    role: m.role,
-    message: sanitizeText(m.message, { maxLength: 600 }).text,
-  }));
+  // 1. Sanitize input & detect prompt injection
+  const { clean, flagged, reasons, truncated } = sanitizeText(rawText, { maxLength: 1000 });
 
-  const userRow = await insertChatMessage({ employeeId: employee.id, role: 'user', message: text || '(empty)' });
+  const effectiveUserKey = userKey ?? (employee ? String(employee.id) : 'anonymous');
+  const employeeId = employee?.id ?? (typeof userKey === 'number' ? userKey : null);
 
   if (flagged) {
-    await auditLogger.log({
-      eventType: AUDIT_EVENTS.PROMPT_INJECTION_SUSPECTED,
-      employeeId: employee.id,
-      actor: employee.email,
-      details: 'Chat message looked like a prompt-injection attempt and was refused',
-      metadata: { reasons, truncated, message_id: userRow.id },
-    });
-    return reply(employee, userRow, { answer: INJECTION_REFUSAL_TEXT, confidence: null, auditMeta: { refused: 'injection' } });
-  }
-  if (!text) {
-    return reply(employee, userRow, { answer: 'Please type a question about onboarding policies.', auditMeta: { refused: 'empty' } });
+    logger.warn({ reasons, truncated, userKey: effectiveUserKey }, 'Prompt injection detected in chat question');
+    if (employeeId) {
+      await auditLogger.log({
+        eventType: AUDIT_EVENTS.PROMPT_INJECTION_SUSPECTED,
+        employeeId,
+        actor: employee?.email ?? effectiveUserKey,
+        details: 'Chat message flagged for prompt injection and refused',
+        metadata: { reasons, truncated },
+      });
+    }
+
+    const refusalResult = {
+      answer: INJECTION_REFUSAL_TEXT,
+      citations: [],
+      confidence: 0,
+      escalated: true,
+    };
+
+    if (effectiveUserKey) {
+      await insertChatMessage({ userKey: effectiveUserKey, employeeId, role: 'user', message: rawText });
+      await insertChatMessage({
+        userKey: effectiveUserKey,
+        employeeId,
+        role: 'assistant',
+        message: refusalResult.answer,
+        citations: refusalResult.citations,
+        confidence: refusalResult.confidence,
+        escalated: refusalResult.escalated,
+      });
+    }
+
+    return refusalResult;
   }
 
-  const { country, locationScope } = describeProfile(employee);
+  if (!clean) {
+    return {
+      answer: 'Please ask a question about company policies.',
+      citations: [],
+      confidence: 0,
+      escalated: false,
+    };
+  }
 
-  let chunks;
+  // Determine location scope if not explicitly given
+  let scope = locationScope;
+  if (!scope && employee?.location) {
+    const loc = employee.location.toLowerCase();
+    if (loc.includes('india') || loc.includes('mumbai') || loc.includes('bangalore')) scope = 'india';
+    else if (loc.includes('us') || loc.includes('york') || loc.includes('united states')) scope = 'us';
+    else scope = 'global';
+  }
+
+  // 2. Retrieve top-K chunks
+  let chunks = [];
   try {
-    chunks = await retrieve(text, { topK: env.RAG_TOP_K, locationScope: locationScope ? [locationScope, 'global'] : ['global'] });
+    chunks = await retrieve(clean, { topK: env.RAG_TOP_K, locationScope: scope });
   } catch (err) {
-    logger.warn({ err: err.message }, 'chat retrieval failed');
-    return reply(employee, userRow, { answer: UNAVAILABLE_TEXT, confidence: 0, escalated: true, auditMeta: { llm_error: 'retrieval_failed' } });
+    logger.warn({ err: err.message }, 'Chat vector retrieval failed');
+    return {
+      answer: UNAVAILABLE_TEXT,
+      citations: [],
+      confidence: 0,
+      escalated: true,
+    };
   }
 
-  if (chunks.length === 0) {
-    return reply(employee, userRow, { answer: REFUSAL_TEXT, confidence: 0.1, escalated: true, auditMeta: { reason: 'no_policies_retrieved' } });
+  const topScore = chunks[0]?.score ?? 0;
+  const minScore = env.RAG_MIN_SCORE ?? 0.35;
+
+  logger.info(
+    { query: clean, chunksCount: chunks.length, topScore, minScore, latencyMs: Date.now() - startTime },
+    'Chat retrieval completed',
+  );
+
+  // 3. Similarity gate: if no chunks or topScore < RAG_MIN_SCORE, skip LLM and refuse
+  if (chunks.length === 0 || topScore < minScore) {
+    logger.info({ topScore, minScore, query: clean }, 'Similarity gate triggered: skipping LLM and refusing');
+    const refusalResult = {
+      answer: REFUSAL_TEXT,
+      citations: [],
+      confidence: 0,
+      escalated: true,
+    };
+
+    if (effectiveUserKey) {
+      await insertChatMessage({ userKey: effectiveUserKey, employeeId, role: 'user', message: clean });
+      await insertChatMessage({
+        userKey: effectiveUserKey,
+        employeeId,
+        role: 'assistant',
+        message: refusalResult.answer,
+        citations: refusalResult.citations,
+        confidence: refusalResult.confidence,
+        escalated: refusalResult.escalated,
+      });
+    }
+
+    return refusalResult;
   }
 
+  // 4. Build history context (last CHAT_HISTORY_TURNS messages)
+  const turns = env.CHAT_HISTORY_TURNS || 5;
+  let historyTurns = [];
+  if (Array.isArray(history)) {
+    historyTurns = history.slice(-turns);
+  } else if (effectiveUserKey) {
+    const dbHistory = await listChatHistory(effectiveUserKey, turns);
+    historyTurns = dbHistory.map((m) => ({ role: m.role, message: m.message }));
+  }
+
+  // 5. Prompt construction
+  const prompt = buildChatPrompt({ question: clean, history: historyTurns, chunks });
+
+  // 6. Call Gemini in JSON mode with retry on transient error / malformed output
   let gen;
   try {
     gen = await generateJson({
       operation: 'chat',
       systemInstruction: CHAT_SYSTEM,
-      prompt: buildChatPrompt({ question: text, history, chunkText: formatChunks(chunks), country }),
+      prompt,
       responseJsonSchema: chatResponseJsonSchema,
+      temperature: env.LLM_TEMPERATURE,
       simulate,
     });
   } catch (err) {
-    if (!(err instanceof LlmError)) throw err;
-    return reply(employee, userRow, { answer: UNAVAILABLE_TEXT, confidence: 0, escalated: true, auditMeta: { llm_error: err.kind } });
+    logger.warn({ err: err.message }, 'LLM call failed');
+    return {
+      answer: UNAVAILABLE_TEXT,
+      citations: [],
+      confidence: 0,
+      escalated: true,
+    };
   }
 
-  const result = validateChatOutput(gen.text, chunks);
-  if (!result.valid) {
-    await finalizeLlmCall(gen.metricId, { success: false, error: result.error?.slice(0, 500) });
-    return reply(employee, userRow, { answer: UNAVAILABLE_TEXT, confidence: 0, escalated: true, auditMeta: { llm_error: 'invalid_output', detail: result.error } });
+  // Validate output with Zod loose parser
+  let validation = validateChatOutput(gen.text, chunks);
+
+  // If initial JSON parsing or schema validation failed, retry once with correction prompt
+  if (!validation.valid) {
+    logger.warn({ error: validation.error }, 'Initial LLM chat output invalid, retrying with correction prompt...');
+    try {
+      const correctionPrompt = buildCorrectionPrompt(prompt, gen.text, validation.error);
+      const retryGen = await generateJson({
+        operation: 'chat',
+        systemInstruction: CHAT_SYSTEM,
+        prompt: correctionPrompt,
+        responseJsonSchema: chatResponseJsonSchema,
+        temperature: env.LLM_TEMPERATURE,
+      });
+      validation = validateChatOutput(retryGen.text, chunks);
+      if (retryGen.metricId) {
+        await finalizeLlmCall(retryGen.metricId, { success: validation.valid, confidence: validation.confidence });
+      }
+    } catch (retryErr) {
+      logger.error({ retryErr }, 'Correction retry call failed');
+    }
   }
 
-  let { answer, citations, confidence } = result;
+  if (!validation.valid) {
+    if (gen.metricId) await finalizeLlmCall(gen.metricId, { success: false, error: validation.error });
+    return {
+      answer: UNAVAILABLE_TEXT,
+      citations: [],
+      confidence: 0,
+      escalated: true,
+    };
+  }
+
+  let { answer, citations, confidence } = validation;
   const refusal = isRefusal(answer);
-  // An answer with no verifiable citation is ungrounded, so it is treated as "not in the policies".
   const ungrounded = !refusal && citations.length === 0;
 
-  if (refusal || ungrounded) {
+  // 7. Citation verification check
+  if (ungrounded) {
+    confidence = Math.min(confidence, 0.2);
+  }
+
+  // 8. Escalation gate
+  const shouldEscalate = refusal || ungrounded || confidence < LOW_CONFIDENCE_THRESHOLD;
+
+  if (refusal) {
     answer = REFUSAL_TEXT;
     citations = [];
     confidence = Math.min(confidence, 0.2);
   }
-  await finalizeLlmCall(gen.metricId, { success: true, confidence });
 
-  return reply(employee, userRow, {
+  if (gen.metricId) {
+    await finalizeLlmCall(gen.metricId, { success: true, confidence });
+  }
+
+  const finalResult = {
     answer,
     citations,
     confidence,
-    escalated: refusal || ungrounded || confidence < LOW_CONFIDENCE,
-    auditMeta: {
-      llm_model: env.GEMINI_MODEL,
-      prompt_version: env.PROMPT_VERSION,
-      latency_ms: gen.latencyMs,
-      tokens_used: (gen.tokensIn ?? 0) + (gen.tokensOut ?? 0),
-      policies_retrieved: chunks.length,
-      dropped_citations: result.droppedCitations,
-      ungrounded,
-    },
-  });
+    escalated: shouldEscalate,
+  };
+
+  // 9. Persist messages to DB if userKey/employee is known
+  if (effectiveUserKey) {
+    try {
+      await insertChatMessage({ userKey: effectiveUserKey, employeeId, role: 'user', message: clean });
+      const assistantRow = await insertChatMessage({
+        userKey: effectiveUserKey,
+        employeeId,
+        role: 'assistant',
+        message: finalResult.answer,
+        citations: finalResult.citations,
+        confidence: finalResult.confidence,
+        escalated: finalResult.escalated,
+      });
+
+      if (employeeId) {
+        await auditLogger.log({
+          eventType: AUDIT_EVENTS.CHAT_QUERY,
+          employeeId,
+          actor: 'ai',
+          details: `Chat question answered (escalated: ${finalResult.escalated})`,
+          metadata: { message_id: assistantRow.id, confidence, escalated: finalResult.escalated, topScore },
+        });
+      }
+    } catch (dbErr) {
+      logger.warn({ dbErr }, 'Failed to persist chat messages to DB');
+    }
+  }
+
+  return finalResult;
 }

@@ -8,7 +8,7 @@ const PRE_START_WORDS = /\bbefore (the )?(start|first day|joining|day one|day 1)
 export function parseJsonLoose(raw) {
   if (raw !== null && typeof raw === 'object') return raw;
   let text = String(raw ?? '').trim();
-  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
   try {
     return JSON.parse(text);
   } catch {
@@ -19,13 +19,10 @@ export function parseJsonLoose(raw) {
   }
 }
 
-const issueText = (error) => error.issues.map((i) => `${i.path.join('.') || 'task'}: ${i.message}`).join('; ');
+const issueText = (error) => error.issues.map((i) => `${i.path.join('.') || 'root'}: ${i.message}`).join('; ');
 
 /**
  * Validates a raw checklist response.
- * Output: { valid, tasks, rejected: [{ task, reason }], overallConfidence, error? }
- * Individual bad tasks are dropped; the response as a whole is invalid when the root is
- * malformed, nothing survives, or more than 30% of the tasks were rejected.
  */
 export function validateAiOutput(raw, { startDate, today = todayStr() } = {}) {
   const fail = (error, rejected = []) => ({ valid: false, tasks: [], rejected, overallConfidence: null, error });
@@ -71,13 +68,13 @@ export function validateAiOutput(raw, { startDate, today = todayStr() } = {}) {
   return { valid: true, tasks, rejected, overallConfidence };
 }
 
-const norm = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+const norm = (s) => String(s ?? '').toLowerCase().replace(/\.md$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 /**
  * Validates a chat answer and drops citations that do not match a retrieved chunk.
  * Output: { valid, answer, citations, droppedCitations, confidence, error? }
  */
-export function validateChatOutput(raw, chunks) {
+export function validateChatOutput(raw, chunks = []) {
   let parsed;
   try {
     parsed = parseJsonLoose(raw);
@@ -87,24 +84,47 @@ export function validateChatOutput(raw, chunks) {
   const result = chatAnswerSchema.safeParse(parsed);
   if (!result.success) return { valid: false, error: issueText(result.error) };
 
-  const citations = [];
+  const verifiedCitations = [];
   let droppedCitations = 0;
+
   for (const c of result.data.citations) {
-    const chunk = chunks.find(
-      (k) =>
-        norm(k.doc_name) === norm(c.doc_name) &&
-        (norm(k.section) === norm(c.section) || norm(k.section).includes(norm(c.section)) || norm(c.section).includes(norm(k.section))),
-    );
+    const candidateDoc = norm(c.doc_name);
+    const candidateSec = norm(c.section);
+
+    const chunk = chunks.find((k) => {
+      const chunkDoc = norm(k.doc_name);
+      const chunkSec = norm(k.section);
+      const docMatch = chunkDoc === candidateDoc || chunkDoc.includes(candidateDoc) || candidateDoc.includes(chunkDoc);
+      const secMatch =
+        chunkSec === candidateSec ||
+        chunkSec.includes(candidateSec) ||
+        candidateSec.includes(chunkSec);
+      return docMatch && secMatch;
+    });
+
     if (!chunk) {
       droppedCitations += 1;
       continue;
     }
-    citations.push({
-      doc_name: chunk.doc_name,
-      section: chunk.section,
-      quote: c.quote.slice(0, 200),
-    });
+
+    // De-duplicate citations
+    const already = verifiedCitations.some(
+      (v) => norm(v.doc_name) === norm(chunk.doc_name) && norm(v.section) === norm(chunk.section),
+    );
+    if (!already) {
+      verifiedCitations.push({
+        doc_title: chunk.doc_title,
+        doc_name: chunk.doc_name,
+        section: chunk.section,
+      });
+    }
   }
 
-  return { valid: true, answer: result.data.answer, citations, droppedCitations, confidence: result.data.confidence };
+  return {
+    valid: true,
+    answer: result.data.answer,
+    citations: verifiedCitations,
+    droppedCitations,
+    confidence: result.data.confidence,
+  };
 }

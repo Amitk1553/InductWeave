@@ -4,6 +4,7 @@ import { Activity, FlaskConical, LayoutDashboard, ListChecks, Users } from 'luci
 import { NavLink, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Tone } from '@/components/StatusBadge';
+import ChatWidget from '@/components/ChatWidget';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { HOME_BY_ROLE, NAV_BY_ROLE, ROLE_LABEL } from '@/lib/roles';
@@ -94,6 +95,7 @@ export default function Layout({ me, children }) {
           </div>
         </header>
         <main className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-6">{children}</main>
+        <ChatWidget />
       </div>
     </div>
   );
