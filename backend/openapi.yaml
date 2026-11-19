@@ -1,0 +1,748 @@
+openapi: 3.0.3
+info:
+  title: Employee Onboarding Orchestrator API
+  version: 1.0.0
+  description: |
+    AI-assisted onboarding with human approval. All `/api` routes require a Clerk session token
+    (`Authorization: Bearer <token>`). Roles come from Clerk `publicMetadata.role` (`hr`, `manager`, `employee`).
+    Errors always use `{ "error": { "code", "message", "details?" } }`.
+servers:
+  - url: http://localhost:8000
+security:
+  - bearerAuth: []
+tags:
+  - { name: System }
+  - { name: Employees }
+  - { name: Onboarding }
+  - { name: Tasks }
+  - { name: Chat }
+  - { name: Escalations }
+  - { name: Insights }
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  uptime: { type: number }
+
+  /api/me:
+    get:
+      tags: [System]
+      summary: Current user, resolved role and linked employee id
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/dev/role:
+    post:
+      tags: [System]
+      summary: "DEV ONLY: change your own Clerk role (registered only when NODE_ENV=development)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [hr, manager, employee] }
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  role: { type: string }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /api/employees:
+    get:
+      tags: [Employees]
+      summary: "Role-scoped employee list with plan status and progress"
+      description: HR sees everyone, managers their direct reports, employees only themselves. Draft plans are masked as `preparing` for non-HR.
+      responses:
+        '200':
+          description: Employees
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employees:
+                    type: array
+                    items: { $ref: '#/components/schemas/EmployeeSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Employees]
+      summary: Add a new hire and generate a draft plan (HR)
+      parameters:
+        - $ref: '#/components/parameters/Simulate'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewEmployee' }
+      responses:
+        '201':
+          description: Employee created; plan generated (AI, or fallback if AI failed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employee: { $ref: '#/components/schemas/Employee' }
+                  plan: { $ref: '#/components/schemas/Plan' }
+                  mode: { type: string, enum: [ai, fallback] }
+                  tasksCreated: { type: integer }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/employees/{id}:
+    get:
+      tags: [Employees]
+      summary: One employee (within the caller's data scope)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Employee and plan summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employee: { $ref: '#/components/schemas/Employee' }
+                  summary: { $ref: '#/components/schemas/EmployeeSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/onboarding/generate/{employeeId}:
+    post:
+      tags: [Onboarding]
+      summary: Regenerate the plan as a new draft version (HR)
+      description: Previous versions are kept. Returns 409 when the employee already has an approved plan.
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: '#/components/parameters/Simulate'
+      responses:
+        '201':
+          description: New draft plan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan: { $ref: '#/components/schemas/Plan' }
+                  tasksCreated: { type: integer }
+                  mode: { type: string, enum: [ai, fallback] }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/onboarding/{planId}:
+    get:
+      tags: [Onboarding]
+      summary: Plan with tasks, confidence, citations and compliance result (HR)
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+      responses:
+        '200':
+          description: Plan detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/onboarding/{planId}/approve:
+    post:
+      tags: [Onboarding]
+      summary: Approve all tasks of a draft plan (HR)
+      description: |
+        Blocked with 409 when a `requires_review` task with confidence < 0.3 is unconfirmed, or the dependency graph has a cycle.
+        On success tasks without unmet dependencies become `active`.
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+      responses:
+        '200':
+          description: Approved plan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan: { $ref: '#/components/schemas/Plan' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/onboarding/{planId}/reject:
+    post:
+      tags: [Onboarding]
+      summary: Reject a draft plan with a reason (HR)
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        '200':
+          description: Rejected plan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan: { $ref: '#/components/schemas/Plan' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/tasks:
+    get:
+      tags: [Tasks]
+      summary: Role-scoped task list
+      description: Non-HR callers never receive tasks of draft or rejected plans. Each task carries `blockedBy` (unmet dependencies).
+      parameters:
+        - { name: employeeId, in: query, schema: { type: integer } }
+        - { name: planId, in: query, schema: { type: integer } }
+        - { name: assignedToRole, in: query, schema: { type: string, enum: [hr, it, manager, employee] } }
+      responses:
+        '200':
+          description: Tasks, plus the employee's latest plan summary when employeeId is resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: '#/components/schemas/Task' }
+                  plan:
+                    type: object
+                    nullable: true
+    post:
+      tags: [Tasks]
+      summary: Add a task to a draft plan (HR)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewTask' }
+      responses:
+        '201':
+          description: Task created with source `hr_added`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: '#/components/schemas/Task' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/tasks/{id}:
+    patch:
+      tags: [Tasks]
+      summary: Edit a task (HR); sets hr_modified
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                dueDate: { type: string, format: date }
+                assignedToRole: { type: string, enum: [hr, it, manager, employee] }
+                assignedToName: { type: string, nullable: true }
+                priority: { type: integer, minimum: 1, maximum: 5 }
+                dependencyIds: { type: array, items: { type: integer }, description: Draft plans only; cycles are rejected with 409 }
+      responses:
+        '200':
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: '#/components/schemas/Task' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Tasks]
+      summary: Delete a task from a draft plan (HR)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: Deleted }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/tasks/{id}/confirm:
+    post:
+      tags: [Tasks]
+      summary: Mark a flagged task as reviewed (HR)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Task confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: '#/components/schemas/Task' }
+
+  /api/tasks/{id}/status:
+    patch:
+      tags: [Tasks]
+      summary: Start or complete a task (assignee, assigned role holder, or HR)
+      description: |
+        Allowed transitions: active -> in_progress | completed, in_progress -> completed, overdue/escalated -> in_progress | completed.
+        Returns 409 with `details.blockedBy` while dependencies are incomplete. Completing a task unblocks dependents.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [in_progress, completed] }
+      responses:
+        '200':
+          description: Updated task, unblocked tasks and plan progress
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: { $ref: '#/components/schemas/Task' }
+                  unblocked:
+                    type: array
+                    items: { type: object, properties: { id: { type: integer }, title: { type: string } } }
+                  progress: { type: object }
+                  planStatus: { type: string }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/chat:
+    post:
+      tags: [Chat]
+      summary: Ask the policy assistant
+      description: |
+        Answers only from retrieved policy excerpts, with verified citations. Out-of-scope questions get the standard refusal
+        and `escalated: true`. Suspected prompt injection is refused and audited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, maxLength: 2000 }
+                employeeId: { type: integer, description: HR/manager only; employees always chat as themselves }
+      responses:
+        '201':
+          description: Assistant reply
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { $ref: '#/components/schemas/ChatMessage' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/chat/history:
+    get:
+      tags: [Chat]
+      summary: Chat history (oldest first)
+      parameters:
+        - { name: employeeId, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items: { $ref: '#/components/schemas/ChatMessage' }
+
+  /api/chat/contact-hr:
+    post:
+      tags: [Chat]
+      summary: Ask HR to follow up on an unanswered question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId]
+              properties:
+                messageId: { type: integer }
+      responses:
+        '201': { description: Escalation created }
+        '200': { description: An identical escalation is already open }
+
+  /api/dashboard/stats:
+    get:
+      tags: [Insights]
+      summary: "Dashboard analytics (HR: all, manager: own team)"
+      responses:
+        '200':
+          description: Aggregated stats
+          content:
+            application/json:
+              schema: { type: object }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/escalation/scan:
+    post:
+      tags: [Escalations]
+      summary: Run the escalation scan now (HR, demo)
+      responses:
+        '200':
+          description: Scan summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary: { type: object }
+
+  /api/escalations:
+    get:
+      tags: [Escalations]
+      summary: "Role-scoped escalations (HR: all, manager: own team)"
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved] } }
+      responses:
+        '200':
+          description: Escalations, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  escalations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Escalation' }
+
+  /api/escalations/{id}/resolve:
+    post:
+      tags: [Escalations]
+      summary: Resolve an escalation (HR)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  escalation: { $ref: '#/components/schemas/Escalation' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/audit:
+    get:
+      tags: [Insights]
+      summary: Immutable audit trail in time order (HR)
+      parameters:
+        - { name: employeeId, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEvent' }
+
+  /api/observability/metrics:
+    get:
+      tags: [Insights]
+      summary: LLM and harness metrics computed from llm_metrics, plans, tasks and audit data (HR)
+      responses:
+        '200':
+          description: Metrics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Metrics' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Clerk session token
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    PlanId:
+      name: planId
+      in: path
+      required: true
+      schema: { type: integer }
+    Simulate:
+      name: simulate
+      in: query
+      required: false
+      description: Demo/eval hook (ignored in production). `failure` forces the fallback path; `malformed` simulates invalid model JSON.
+      schema: { type: string, enum: [failure, malformed] }
+  responses:
+    Unauthorized:
+      description: Missing or invalid session
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Role or data scope does not allow this
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: State conflict (e.g. blocked approval, incomplete dependencies, dependency cycle)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, nullable: true }
+        name: { type: string, nullable: true }
+        role: { type: string, enum: [hr, manager, employee] }
+        employeeId: { type: integer, nullable: true }
+    NewEmployee:
+      type: object
+      required: [name, email, role, department, location, startDate]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, description: Free text; known roles get tailored tasks }
+        department: { type: string }
+        location: { type: string, description: 'Bangalore, Mumbai, New York, London, Toronto or free text' }
+        startDate: { type: string, format: date }
+        managerName: { type: string }
+        managerEmail: { type: string, format: email }
+    Employee:
+      allOf:
+        - $ref: '#/components/schemas/NewEmployee'
+        - type: object
+          properties:
+            id: { type: integer }
+            status: { type: string, enum: [pending, onboarding, completed, cancelled] }
+    EmployeeSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        department: { type: string }
+        location: { type: string }
+        startDate: { type: string, format: date }
+        status: { type: string }
+        planId: { type: integer, nullable: true }
+        planStatus: { type: string, nullable: true, description: 'draft | approved | rejected | in_progress | completed | preparing (non-HR view of a draft)' }
+        generationMode: { type: string, nullable: true }
+        totalTasks: { type: integer }
+        completedTasks: { type: integer }
+        overdueTasks: { type: integer }
+    Plan:
+      type: object
+      properties:
+        id: { type: integer }
+        employeeId: { type: integer }
+        status: { type: string, enum: [draft, approved, rejected, in_progress, completed] }
+        version: { type: integer }
+        generationMode: { type: string, enum: [ai, fallback] }
+        aiConfidence: { type: number, nullable: true }
+        complianceScore: { type: number, nullable: true }
+        complianceMissing: { type: array, items: { type: object }, nullable: true }
+        notes: { type: string, nullable: true }
+        approvedBy: { type: string, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+    PlanDetail:
+      type: object
+      properties:
+        plan: { $ref: '#/components/schemas/Plan' }
+        employee: { $ref: '#/components/schemas/Employee' }
+        tasks:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        progress: { type: object }
+        versions: { type: array, items: { type: object } }
+        compliance:
+          type: object
+          properties:
+            score: { type: number }
+            missing: { type: array, items: { type: object } }
+        banner: { type: string, nullable: true }
+        approvalBlockers:
+          type: array
+          items: { type: object }
+    Task:
+      type: object
+      properties:
+        id: { type: integer }
+        planId: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        category: { type: string, enum: [documents, equipment, training, access, introductions] }
+        assignedToRole: { type: string, enum: [hr, it, manager, employee] }
+        assignedToName: { type: string, nullable: true }
+        status: { type: string, enum: [pending, active, in_progress, completed, overdue, escalated] }
+        priority: { type: integer }
+        dueDate: { type: string, format: date }
+        dependencyIds: { type: array, items: { type: integer } }
+        blockedBy: { type: array, items: { type: object } }
+        confidence: { type: number }
+        requiresReview: { type: boolean }
+        reviewReason: { type: string, nullable: true }
+        reviewConfirmed: { type: boolean }
+        policyReference: { type: string, nullable: true }
+        source: { type: string, enum: [rule, ai, hr_added] }
+        hrModified: { type: boolean }
+    NewTask:
+      type: object
+      required: [planId, title, category, assignedToRole, dueDate]
+      properties:
+        planId: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        category: { type: string, enum: [documents, equipment, training, access, introductions] }
+        assignedToRole: { type: string, enum: [hr, it, manager, employee] }
+        priority: { type: integer, minimum: 1, maximum: 5 }
+        dueDate: { type: string, format: date }
+        dependencyIds: { type: array, items: { type: integer } }
+        policyReference: { type: string, nullable: true }
+    ChatMessage:
+      type: object
+      properties:
+        id: { type: integer }
+        employeeId: { type: integer }
+        role: { type: string, enum: [user, assistant] }
+        message: { type: string }
+        citations:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              doc_name: { type: string }
+              section: { type: string }
+              quote: { type: string }
+        confidence: { type: number, nullable: true }
+        escalated: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    Escalation:
+      type: object
+      properties:
+        id: { type: integer }
+        employeeId: { type: integer }
+        employeeName: { type: string }
+        planId: { type: integer, nullable: true }
+        taskId: { type: integer, nullable: true }
+        type: { type: string }
+        severity: { type: string, enum: [warning, critical] }
+        message: { type: string }
+        status: { type: string, enum: [open, resolved] }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        eventType: { type: string }
+        employeeId: { type: integer, nullable: true }
+        actor: { type: string }
+        details: { type: string }
+        metadata: { type: object, nullable: true }
+        createdAt: { type: string, format: date-time }
+    Metrics:
+      type: object
+      properties:
+        avgLatencyMs: { type: number, nullable: true }
+        p95LatencyMs: { type: number, nullable: true }
+        aiSuccessRate: { type: number, nullable: true }
+        totalLlmCalls: { type: integer }
+        fallbackCount: { type: integer }
+        avgConfidence: { type: number, nullable: true }
+        aiTasksModifiedPct: { type: number, nullable: true }
+        topEscalationReasons: { type: array, items: { type: object } }
+        avgOnboardingDays: { type: number, nullable: true }
+        latencyHistogram: { type: array, items: { type: object } }
+        dailyTrend: { type: array, items: { type: object } }
+        promptInjectionCount: { type: integer }
+        unansweredChatCount: { type: integer }
