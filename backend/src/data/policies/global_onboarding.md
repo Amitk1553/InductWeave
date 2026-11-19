@@ -1,40 +1,58 @@
 # Global Onboarding Policy
 
-This policy applies to every new employee, in every country. Country-specific rules in the India, US, Canada and UK policies are additional to it and take precedence where they differ.
+Welcome to Nimbus Technologies. This policy outlines the foundational onboarding process, overall corporate policy framework, and orientation standards for all newly hired employees across our global offices in Mumbai, Bangalore, New York, London, and Toronto.
 
-## Day One Checklist
+## 1.0 General Company Policies and Master Handbook Overview
 
-On your first day you should have your signed employment contract on file with HR, your company email and single sign-on account active, and your laptop in hand. Please arrive at 9:30 AM local time for the HR orientation session, which takes about two hours.
+Nimbus Technologies maintains a comprehensive set of corporate, operational, and HR policies governing all employees globally. Our core company policy structure includes:
+- Global Onboarding Policy: Defines the comprehensive ninety-day onboarding program, first-week schedule, buddy mentorship, manager 1:1 cadence, security training deadlines, and probation period requirements.
+- Workplace and Conduct Policy: Outlines company workplace standards, our business casual dress code (with relaxed casual Fridays), standard 40-hour workweek with core collaboration hours (10:00 AM to 4:00 PM), 3-day hybrid working model, 20-day annual paid vacation leave, 10-day sick leave, company holidays, and zero-tolerance anti-harassment code of conduct.
+- IT Equipment and Security Policy: Governs standardized laptop provisioning (5 business days request lead time), Okta Single Sign-On (SSO) with MFA, mandatory VPN client setup before accessing internal networks, least-privilege cloud access, device return terms, and 24/5 IT helpdesk support.
+- Employee Benefits Policy: Details medical, dental, and vision insurance with a strict 30-day enrollment window from joining, comprehensive dependent coverage, confidential Employee Assistance Program (EAP), $600 wellness stipend, and $1,000 annual learning & development budget.
+- Regional Compliance Policies: Covers statutory employment regulations, including India mandatory day-one documents (PAN, Aadhaar, PF/UAN registration, bank details) and US requirements (Form W-4 tax withholding, Form I-9 verification within 3 business days, SSN, and 401(k) matching).
 
-Documents to bring or upload on day one:
-- A government-issued photo ID (passport or national ID).
-- Your signed employment contract and offer letter, if not already e-signed.
-- The country-specific documents listed in your regional policy (for example PAN and Aadhaar in India, Form W-4 and Form I-9 in the United States).
+All employees are required to review, acknowledge, and adhere to these company policies. Detailed policy manuals and updates are maintained on the Nimbus Employee Portal.
 
-HR orientation covers company culture, the code of conduct, how to request time off, how to reach IT support, and an overview of benefits. After orientation you meet your manager and your onboarding buddy. HR confirms that your contract has been countersigned before the end of day one. If any document is missing, HR records a due date and follows up with you; most identity and tax documents must be submitted within three days of joining.
+## 1.1 Onboarding Overview and Philosophy
 
-## Working Hours
+At Nimbus Technologies, onboarding is designed to integrate new team members smoothly into our culture, technology stack, and day-to-day operations. The global onboarding program spans the employee's first ninety days, with the most critical milestones occurring during the first week. Every new employee is assigned an onboarding coordinator from the People Operations team who guides them through administrative tasks, compliance requirements, and orientation sessions. All onboarding steps are tracked digitally through the Nimbus Employee Portal.
 
-Standard working hours are 9:30 AM to 6:00 PM local time, Monday to Friday, with a one-hour lunch break. Teams may agree flexible hours as long as they cover core collaboration hours from 11:00 AM to 4:00 PM. Hybrid working is the default: employees are expected in the office at least three days per week unless their manager approves a different arrangement. Overtime is not expected and must be approved in advance by the manager where local law requires it.
+## 1.2 First-Week Schedule and Orientation
 
-## Dress Code
+Every new hire begins their journey with a structured first-week schedule designed to provide context without causing information overload:
+- Day 1 (Monday): Global Welcome Session at 10:00 AM local time, identity verification, laptop setup, and digital workspace walkthrough.
+- Day 2 (Tuesday): Company culture, values overview, and introduction to the People Operations and Workplace Experience teams.
+- Day 3 (Wednesday): Departmental deep-dive, team introductions, and an overview of current project roadmaps.
+- Day 4 (Thursday): Technical environment walkthrough, security protocols review, and tool provisioning check.
+- Day 5 (Friday): End-of-week reflection, buddy debrief, and initial goal alignment with the department manager.
 
-The dress code is business casual. Clean, neat clothing is expected in the office; jeans and sneakers are fine. For client meetings, interviews and company events, smart business casual or formal attire is recommended. Employees should wear their company ID badge visibly at all times in the office. Remote employees are not required to follow the office dress code but should dress appropriately for video calls with customers.
+## 1.3 Onboarding Buddy Program
 
-## First Week Schedule and Buddy Program
+To help new hires navigate day-to-day life at Nimbus Technologies, every new employee is paired with an Onboarding Buddy from outside their direct reporting line:
+- Buddies are assigned at least three business days before the employee's start date.
+- The buddy schedules an informal virtual coffee during the new hire's first two days.
+- Buddies meet weekly with new hires throughout the first thirty days.
+- Buddies answer informal questions regarding team norms, office navigation, collaboration channels, and general workplace etiquette.
 
-Every new hire is assigned an onboarding buddy, a peer from the same or an adjacent team, at least three days before the start date. The buddy answers day-to-day questions, introduces you to the team, and joins you for lunch on the first day. The buddy relationship lasts 90 days.
+## 1.4 Manager 1:1 Meetings and Check-Ins
 
-Your manager prepares a first-week schedule before you start. It includes: a welcome meeting with the team, a walkthrough of the team's current projects, sessions on the tools you will use, and your first one-on-one with your manager on day two. By the end of week one you should have completed the mandatory security training, set up your accounts, and agreed your 30/60/90-day goals with your manager.
+Managers play a central role in onboarding success and must maintain regular formal communication:
+- Initial 1:1 Meeting: Managers must conduct a thirty-minute 1:1 meeting on the employee's first day to establish immediate expectations and introduce key stakeholders.
+- First-Week Review: A forty-five-minute check-in on Day 5 to review onboarding progress and address any blockers.
+- Ongoing Cadence: Weekly thirty-minute 1:1 meetings are mandatory throughout the first ninety days.
+- Goal Setting: Managers must outline 30-60-90 day performance goals in the HR portal by the end of the employee's second week.
 
-## Leave Policy
+## 1.5 Security Awareness Training Deadline
 
-Full-time employees receive 20 days of paid annual leave per calendar year, pro-rated from the start date in the first year. In addition there are public holidays according to the local calendar and 10 days of paid sick leave per year. Leave requests are submitted through the HR portal and approved by your manager; please request annual leave at least two weeks in advance for absences longer than three days. Unused annual leave up to five days may be carried over into the next year. Parental leave and other statutory leave follow local law, as described in the regional policies.
+Information security is paramount at Nimbus Technologies. All newly hired employees must complete the Mandatory Security Awareness Training within 14 calendar days of their start date:
+- The training is hosted on the Nimbus Learning Management System (LMS) and takes approximately 90 minutes.
+- Topics covered include phishing detection, clean desk policy, credential management, and data classification.
+- Completion is automatically tracked; employees failing to complete the training within 14 calendar days will have their network and internal systems access suspended until compliance is verified by the Information Security team.
 
-## Health Insurance Enrollment
+## 1.6 Probation Period and Performance Reviews
 
-Health insurance is provided to all full-time employees. You must enroll within 30 days of your start date through the benefits portal; coverage begins on your start date if you enroll in time. If you miss the 30-day window you can only enroll during the annual open enrollment period in November, unless you have a qualifying life event such as marriage or the birth of a child. Spouse and dependent children can be added during enrollment. HR sends the enrollment link on your first day; contact the HR benefits team if you do not receive it.
-
-## Probation and Feedback
-
-The standard probation period is six months. Your manager holds one-on-one meetings weekly during the first month and every two weeks afterwards. Formal check-ins happen at 30, 60 and 90 days, and a probation review takes place at the end of month six. Feedback is two-way: new hires are encouraged to share their onboarding experience with HR in the pulse survey sent after the first 30 days.
+All regular full-time and part-time employment offers at Nimbus Technologies include a standard probationary period:
+- Duration: The standard probation period is ninety (90) calendar days from the employment start date.
+- Mid-Probation Review: At day 45, the manager and employee hold an interim performance review to evaluate cultural fit, role execution, and training progress.
+- Final Confirmation: At day 90, the manager submits a formal confirmation recommendation through the HR portal.
+- Notice During Probation: During the probationary period, either party may terminate the employment relationship with two weeks written notice.

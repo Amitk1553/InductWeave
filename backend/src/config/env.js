@@ -19,6 +19,8 @@ const schema = z.object({
   LLM_TEMPERATURE: z.coerce.number().min(0).max(1).default(0.1),
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   RAG_TOP_K: z.coerce.number().int().positive().default(5),
+  RAG_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.35),
+  CHAT_HISTORY_TURNS: z.coerce.number().int().positive().default(5),
   CHUNK_SIZE: z.coerce.number().int().positive().default(500),
   CHUNK_OVERLAP: z.coerce.number().int().nonnegative().default(50),
   PROMPT_VERSION: z.string().min(1).default('v1.2'),

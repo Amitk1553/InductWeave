@@ -2,14 +2,14 @@
 
 const INJECTION_PATTERNS = [
   [/ignore\s+(all\s+|any\s+|the\s+|your\s+)?(previous|prior|above|earlier|preceding)\s+(instructions?|prompts?|rules?|directions?)/i, 'ignore-previous-instructions'],
-  [/disregard\s+(all\s+|any\s+|the\s+|your\s+)?(previous|prior|above|earlier)?\s*(instructions?|rules?|guidelines?)/i, 'disregard-instructions'],
+  [/disregard\s+(all\s+|any\s+|the\s+|your\s+)?(previous|prior|above|earlier)?\s*(instructions?|rules?|guidelines?|the\s+above)/i, 'disregard-instructions'],
   [/forget\s+(everything|all\s+(previous|prior|your)|your\s+(instructions?|rules?))/i, 'forget-instructions'],
   [/override\s+(your|the|all)\s+(rules?|instructions?|guidelines?|safety)/i, 'override-rules'],
   [/(reveal|show|print|repeat|output|display|leak)\s+(me\s+)?(your|the)\s+(system|hidden|initial|original)\s+(prompt|instructions?|message)/i, 'prompt-exfiltration'],
   [/system\s+prompt/i, 'system-prompt'],
   [/\byou\s+are\s+now\b/i, 'role-reassignment'],
   [/\bpretend\s+(to\s+be|you\s+are|that\s+you)/i, 'role-reassignment'],
-  [/\bact\s+as\s+(an?\s+)?(unrestricted|jailbroken|dan|evil|different)/i, 'role-reassignment'],
+  [/\bact\s+as\b/i, 'role-reassignment'],
   [/\b(developer|debug|god|admin)\s+mode\b/i, 'privileged-mode'],
   [/\bjailbreak/i, 'jailbreak'],
   [/\bnew\s+instructions?\s*:/i, 'new-instructions'],
@@ -23,7 +23,7 @@ const ROLE_MARKERS = /^\s*(system|assistant|user|human|ai|model)\s*:\s*/gim;
 
 /**
  * Cleans text for prompt use and reports suspected injection.
- * Returns the cleaned text even when flagged; callers decide whether to refuse.
+ * Returns { clean, text, flagged, reasons, truncated }.
  */
 export function sanitizeText(input, { maxLength = 1000 } = {}) {
   const original = String(input ?? '');
@@ -46,12 +46,12 @@ export function sanitizeText(input, { maxLength = 1000 } = {}) {
   const truncated = text.length > maxLength;
   if (truncated) text = text.slice(0, maxLength);
 
-  // Re-check after normalization so obfuscated variants (zero-width chars etc.) are caught too.
+  // Re-check after normalization so obfuscated variants are caught too.
   for (const [pattern, reason] of INJECTION_PATTERNS) {
     if (pattern.test(text) && !reasons.includes(reason)) reasons.push(reason);
   }
 
-  return { text, flagged: reasons.length > 0, reasons, truncated };
+  return { clean: text, text, flagged: reasons.length > 0, reasons, truncated };
 }
 
 export const wrapUserData = (text) => `<user_data>${text}</user_data>`;
@@ -68,7 +68,7 @@ export function sanitizeProfile({ role, department, location, startDate }) {
       flags.push({ field, reasons: r.reasons });
       return 'unspecified';
     }
-    return r.text || 'unspecified';
+    return r.clean || 'unspecified';
   };
   return {
     profile: {

@@ -42,7 +42,11 @@ export function createApp() {
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: 'Onboarding Orchestrator API' }));
 
   const api = express.Router();
-  api.use(generalLimiter, clerk, requireAuth);
+  api.use(generalLimiter);
+  // Chat has its own limiter and optional Clerk authentication
+  api.use('/chat', chat);
+
+  api.use(clerk, requireAuth);
   api.use(me);
   api.use('/employees', employees);
   api.use('/onboarding', onboarding);
